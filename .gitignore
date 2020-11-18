@@ -4,3 +4,7 @@ npm-debug.log
 !mock-cert.pem
 .env
 coverage
+jspm_packages
+
+# Serverless directories
+.serverless
