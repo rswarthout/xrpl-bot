@@ -278,7 +278,7 @@ module.exports = ({ app }) => {
         return commentDetails;
     }
 
-    // Transaction Type: Payment
+    // Transaction Type: Payment - currently only supports a transfer from one account to another.
     function buildDetailedPaymentExplanation(result)
     {
         var commentDetails = [];
@@ -312,6 +312,7 @@ module.exports = ({ app }) => {
         }
 
         commentDetails.push("| | | | **`" + (result.Fee / 1000000) + "`** | (the fee that was burned) |");
+        commentDetails.push("");
 
         return commentDetails;
     }
