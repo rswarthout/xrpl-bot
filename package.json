@@ -1,0 +1,26 @@
+{
+  "name": "xrpl-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A bot that provides details about XRPL transactions.",
+  "author": "Robert Swarthout <robert@xrpl.net>",
+  "license": "ISC",
+  "repository": "https://github.com/rswarthout/xrpl-bot.git",
+  "homepage": "https://github.com/rswarthout/xrpl-bot",
+  "bugs": "https://github.com/rswarthout/xrpl-bot/issues",
+  "scripts": {
+    "start": "probot run ./index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "probot": "^10.9.3",
+    "ws": "^7.4.0"
+  },
+  "devDependencies": {
+    "nock": "^13.0.4",
+    "smee-client": "^1.1.0"
+  },
+  "engines": {
+    "node": ">= 10.13.0"
+  }
+}
