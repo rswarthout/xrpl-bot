@@ -379,5 +379,5 @@ let getTransaction = async function(hash) {
 
 let linkToExplorer = function(id)
 {
-    return "[" + id + "](httpd://bithomp.com/explorer/" + id + ")";
+    return "[" + id + "](https://bithomp.com/explorer/" + id + ")";
 };
