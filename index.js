@@ -77,11 +77,11 @@ let buildGeneralDetailsTable = function(result)
 };
 
 // Function to handle routing to the correct transaction type handler
-let buildDetailExplanationForTransactionType = function(result)
+let buildDetailExplanationForTransactionType = async function(result)
 {
     switch (result.TransactionType) {
         case 'AccountSet':
-            return buildDetailedAccountSetExplanation(result);
+            return await buildDetailedAccountSetExplanation(result);
 
         case 'AccountDelete':
             return buildDetailedAccountDeleteExplanation(result);
@@ -106,9 +106,8 @@ let buildDetailExplanationForTransactionType = function(result)
             return buildNoSupportedExplanation(result);
             //return buildDetailedEscrowCancelExplanation(result);
 
-        case 'EsrowCreate':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedEscrowCreateExplanation(result);
+        case 'EscrowCreate':
+            return await buildDetailedEscrowCreateExplanation(result);
 
         case 'EscrowFinish':
             return buildNoSupportedExplanation(result);
@@ -234,9 +233,14 @@ let buildDetailedEscrowCancelExplanation = function(result)
 };
 
 // Transaction Type: EscrowCreate
-let buildDetailedEscrowCreateExplanation = function(result)
+let buildDetailedEscrowCreateExplanation = async function(result)
 {
+    var rippleLibResponse = await getRippleLibResponse(result.hash);
     var commentDetails = [];
+
+    commentDetails.push("");
+    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** created an escrow for **`" + rippleLibResponse.specification.amount + "`** XRP that will expire on `" + rippleLibResponse.specification.allowExecuteAfter + "` and be credited into " + getDestinationAccountName(result) + " **`" + rippleLibResponse.specification.destination + "`**.");
+    commentDetails.push("");
 
     return commentDetails;
 };
@@ -383,7 +387,7 @@ let getTransaction = async function(hash) {
             .catch(function(error) {
                 console.log(error);
             });
-    })
+    });
 };
 
 let getRippleLibResponse = async function(hash) {
