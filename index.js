@@ -1,4 +1,6 @@
-const WebSocket = require('ws')
+const WebSocket = require('ws');
+const axios = require('axios');
+const RippleAPI = require('ripple-lib').RippleAPI;
 
 module.exports = ({ app }) => {
 
@@ -46,17 +48,17 @@ let generateResponse = async function(context, body) {
         commentDetails.push("The transaction could not be returned at this time.");
     } else {
         commentDetails.push("# Transaction Details");
-        commentDetails.push("**Hash:** [" + hash + "](https://bithomp.com/explorer/" + hash + ")");
-        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(response.result));
-        commentDetails.push.apply(commentDetails, buildDetailExplanationForTransactionType(response.result));
+        commentDetails.push("**Hash:** [" + hash + "](https://xrpscan.com/tx/" + hash + ")");
+        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(response));
+        commentDetails.push.apply(commentDetails, await buildDetailExplanationForTransactionType(response));
         commentDetails.push("## Transaction JSON");
         commentDetails.push("``` js ");
-        commentDetails.push(JSON.stringify(response.result, null, 2))
+        commentDetails.push(JSON.stringify(response, null, 2))
         commentDetails.push("```");
     }
 
     const issueComment = context.issue({ body: commentDetails.join("\n") });
-    return context.github.issues.createComment(issueComment);
+    return context.octokit.issues.createComment(issueComment);
 };
 
 let buildGeneralDetailsTable = function(result)
@@ -65,10 +67,10 @@ let buildGeneralDetailsTable = function(result)
     commentDetails.push("| Property | Value |");
     commentDetails.push("| :--- | :--- |");
     commentDetails.push("| Type | " + result.TransactionType + " |");
-    commentDetails.push("| Initiated By | " + linkToExplorer(result.Account) + " |");
+    commentDetails.push("| Initiated By | " + linkToAccount(result.Account) + " |");
     commentDetails.push("| Sequence | " + result.Sequence + " |");
     commentDetails.push("| XRPL fee | " + (result.Fee / 1000000) + " XRP |");
-    commentDetails.push("| Validated | *" + (result.validated ? 'true' : 'false') + "* |");
+    commentDetails.push("| Date | " + result.date + " |");
     commentDetails.push("");
 
     return commentDetails;
@@ -79,12 +81,10 @@ let buildDetailExplanationForTransactionType = function(result)
 {
     switch (result.TransactionType) {
         case 'AccountSet':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedAccountSetExplanation(result);
+            return buildDetailedAccountSetExplanation(result);
 
         case 'AccountDelete':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedAccountDeleteExplanation(result);
+            return buildDetailedAccountDeleteExplanation(result);
 
         case 'CheckCancel':
             return buildNoSupportedExplanation(result);
@@ -163,9 +163,20 @@ let buildNoSupportedExplanation = function(result)
 };
 
 // Transaction Type: AccountSet
-let buildDetailedAccountSetExplanation = function(result)
+let buildDetailedAccountSetExplanation = async function(result)
 {
+    var rippleLibResponse = await getRippleLibResponse(result.hash);
     var commentDetails = [];
+
+    commentDetails.push("## Specification");
+    commentDetails.push("| Property | Value |");
+    commentDetails.push("| :--- | :--- |");
+
+    for (key in rippleLibResponse.specification) {
+        commentDetails.push("| `" + key + "` | `" + rippleLibResponse.specification[key] + "` |");
+    }
+
+    commentDetails.push("");
 
     return commentDetails;
 };
@@ -174,6 +185,10 @@ let buildDetailedAccountSetExplanation = function(result)
 let buildDetailedAccountDeleteExplanation = function(result)
 {
     var commentDetails = [];
+
+    commentDetails.push("");
+    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** was **DELETED**. The remaining **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " were sent to " + getDestinationAccountName(result) + " **`" + result.Destination + "`**" + (('DestinationTag' in result) ? " (DT: `" + result.DestinationTag + "`)" : ""));
+    commentDetails.push("");
 
     return commentDetails;
 };
@@ -272,7 +287,7 @@ let buildDetailedPaymentExplanation = function(result)
     var commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account **`" + result.Account + "`** sent **`" + (result.meta.delivered_amount / 1000000) + "`** XRP to **`" + result.Destination + "`**");
+    commentDetails.push("Account **`" + result.Account + "`** sent **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " to **`" + result.Destination + "`**");
     commentDetails.push("");
 
     commentDetails.push("| Account | XRP Balance Before | XRP Balance After | Difference | Explanation |");
@@ -359,25 +374,83 @@ let ellipsifyAccount = function(account)
 };
 
 let getTransaction = async function(hash) {
-    return await new Promise((resolve, reject) => {
-        const Client = new WebSocket('wss://xrpl.ws')
-
-        Client.on('open', e => {
-            Client.send(JSON.stringify({
-                command: 'tx',
-                transaction: hash,
-                binary: false
-            }))
-        })
-
-        Client.on('message', data => {
-            const response = resolve(JSON.parse(data));
-            Client.close();
-        })
+    return await new Promise((resolve) => {
+        axios
+            .get("https://api.xrpscan.com/api/v1/tx/" + hash)
+            .then(function (response) {
+                resolve(response.data);
+            })
+            .catch(function(error) {
+                console.log(error);
+            });
     })
 };
 
-let linkToExplorer = function(id)
+let getRippleLibResponse = async function(hash) {
+    return await new Promise((resolve) => {
+        const api = new RippleAPI({
+                server: 'wss://xrpl.ws'
+            });
+            api.on('error', (errorCode, errorMessage) => {
+                console.log(errorCode + ': ' + errorMessage);
+            });
+            api.connect().then(() => {
+                resolve(api.getTransaction(hash));
+            }).catch(console.error);
+    })
+}
+
+let linkToAccount = function(id)
 {
-    return "[" + id + "](https://bithomp.com/explorer/" + id + ")";
+    return "[" + id + "](https://xrpscan.com/account/" + id + ")";
+};
+
+let getTransactionAccountName = function(response)
+{
+    if (!('AccountName' in response)) {
+        return "";
+    }
+
+    if (response.AccountName === null) {
+        return "";
+    }
+
+    if (response.AccountName.verified === false) {
+        return "";
+    }
+
+    var name = response.AccountName.name;
+
+    if ('desc' in response.AccountName) {
+        name += " (" + response.AccountName.desc + ")"
+    }
+
+    name = "[" + name + "](https://xrpscan.com/account/" + response.Account + ")";
+
+    return name;
+};
+
+let getDestinationAccountName = function(response)
+{
+    if (!('DestinationName' in response)) {
+        return "";
+    }
+
+    if (response.DestinationName === null) {
+        return "";
+    }
+
+    if (response.DestinationName.verified === false) {
+        return "";
+    }
+
+    var name = response.DestinationName.name;
+
+    if ('desc' in response.DestinationName) {
+        name += " (" + response.DestinationName.desc + ")"
+    }
+
+    name = "[" + name + "](https://xrpscan.com/account/" + response.Destination + ")";
+
+    return name;
 };
