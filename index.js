@@ -110,8 +110,7 @@ let buildDetailExplanationForTransactionType = async function(result)
             return await buildDetailedEscrowCreateExplanation(result);
 
         case 'EscrowFinish':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedEscrowFinishExplanation(result);
+            return await buildDetailedEscrowFinishExplanation(result);
 
         case 'OfferCancel':
             return buildNoSupportedExplanation(result);
@@ -246,9 +245,15 @@ let buildDetailedEscrowCreateExplanation = async function(result)
 };
 
 // Transaction Type: EscrowFinish
-let buildDetailedEscrowFinishExplanation = function(result)
+let buildDetailedEscrowFinishExplanation = async function(result)
 {
+    var rippleLibResponse = await getRippleLibResponse(result.hash);
     var commentDetails = [];
+    var escrowOwner = rippleLibResponse.specification.owner;
+
+    commentDetails.push("");
+    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** finished the escrow. Account " + getDestinationAccountName(result) + " **`" + escrowOwner + "`** received **`" + rippleLibResponse.outcome.balanceChanges[escrowOwner][0].value + "`** " + rippleLibResponse.outcome.balanceChanges[escrowOwner][0].currency + ".");
+    commentDetails.push("");
 
     return commentDetails;
 };
