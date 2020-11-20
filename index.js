@@ -287,7 +287,7 @@ let buildDetailedPaymentExplanation = function(result)
     var commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account **`" + result.Account + "`** sent **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " to **`" + result.Destination + "`**");
+    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** sent **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " to " + getDestinationAccountName(result) + " **`" + result.Destination + "`**" + (('DestinationTag' in result) ? " (DT: `" + result.DestinationTag + "`)" : ""));
     commentDetails.push("");
 
     commentDetails.push("| Account | XRP Balance Before | XRP Balance After | Difference | Explanation |");
