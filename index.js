@@ -1,6 +1,7 @@
-const axios = require('axios');
 const moment = require('moment');
 const util = require('util');
+const RippleAPI = require('ripple-lib').RippleAPI;
+
 const accountNamesJson = require('./account-names.json');
 const accountNames = {};
 
@@ -49,11 +50,11 @@ let generateResponse = async function(context, body) {
     } else {
         commentDetails.push("# Transaction Details");
         commentDetails.push("**Hash:** [" + hash + "](https://xrpscan.com/tx/" + hash + ")");
-        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(tx.result));
-        commentDetails.push.apply(commentDetails, buildDetailExplanationForTransactionType(tx.result));
+        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(tx));
+        commentDetails.push.apply(commentDetails, buildDetailExplanationForTransactionType(tx));
         commentDetails.push("## Transaction JSON");
         commentDetails.push("``` js ");
-        commentDetails.push(JSON.stringify(tx.result, null, 2))
+        commentDetails.push(JSON.stringify(tx, null, 2))
         commentDetails.push("```");
     }
 
@@ -63,17 +64,14 @@ let generateResponse = async function(context, body) {
 
 let buildGeneralDetailsTable = function(tx)
 {
-    let epoch = moment.utc("2000-01-01");
-    epoch.add(tx.date, 's');
-
     let commentDetails = [];
     commentDetails.push("| Property | Value |");
     commentDetails.push("| :--- | :--- |");
     commentDetails.push("| Type | " + tx.TransactionType + " |");
-    commentDetails.push("| Initiated By | " + linkToAccount(tx.Account) + " |");
+    commentDetails.push("| Initiated By | " + getAccountName(tx.Account) + " " + linkToAccount(tx.Account) + " |");
     commentDetails.push("| Sequence | " + tx.Sequence + " |");
-    commentDetails.push("| XRPL fee | " + (tx.Fee / 1000000) + " XRP |");
-    commentDetails.push("| Date | " + epoch.format() + " |");
+    commentDetails.push("| XRPL fee | " + dropsToXrp(tx.Fee) + " XRP |");
+    commentDetails.push("| Date | " + rippleDateToReadable(tx.date) + " |");
     commentDetails.push("");
 
     return commentDetails;
@@ -171,13 +169,9 @@ let buildDetailedAccountSetExplanation = function(tx)
     commentDetails.push("| Property | Value |");
     commentDetails.push("| :--- | :--- |");
 
-    /*
-    @TODO deal with exposing the fields changed.
-
-    for (key in result.specification) {
-        commentDetails.push("| `" + key + "` | `" + tx.specification[key] + "` |");
+    for (key in tx.rippleLib.specification) {
+        commentDetails.push("| `" + key + "` | `" + tx.rippleLib.specification[key] + "` |");
     }
-    */
 
     commentDetails.push("");
 
@@ -190,7 +184,26 @@ let buildDetailedAccountDeleteExplanation = function(tx)
     let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** was **DELETED**. The remaining **`" + (tx.sup.deliveredAmount.value / 1000000) + "`** " + tx.sup.deliveredAmount.currency + " were sent to " + getAccountName(tx) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : ""));
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** was **DELETED**. The remaining **`" + dropsToXrp(tx.meta.DeliveredAmount) + "`** XRP were sent to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : ""));
+    commentDetails.push("");
+
+    let deletedNode;
+
+    for (m in tx.meta.AffectedNodes) {
+        if (('DeletedNode' in tx.meta.AffectedNodes[m]) && tx.meta.AffectedNodes[m].DeletedNode.LedgerEntryType === 'AccountRoot') {
+            deletedNode = tx.meta.AffectedNodes[m].DeletedNode;
+        }
+    }
+
+    commentDetails.push("");
+    commentDetails.push("## Balance Changes");
+    commentDetails.push("| Step | Value |");
+    commentDetails.push("| :--- | ---: |")
+    commentDetails.push("| Starting Balance | `" + dropsToXrp(deletedNode.PreviousFields.Balance) + "` |");
+    commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
+    commentDetails.push("| Sent to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + " | `-" + dropsToXrp(tx.meta.DeliveredAmount) + "` |");
+    commentDetails.push("|  | -------------- |");
+    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(deletedNode.FinalFields.Balance) + "`** |");
     commentDetails.push("");
 
     return commentDetails;
@@ -250,9 +263,34 @@ let buildDetailedEscrowCreateExplanation = function(tx)
     }
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + escrowData.Account + "`** created an escrow for **`" + (escrowData.Amount / 1000000) + "`** XRP that will expire on `" + rippleDateToReadable(escrowData.FinishAfter) + "` and be credited into " + getAccountName(tx) + " **`" + escrowData.Destination + "`**.");
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + escrowData.Account + "`** created an escrow for **`" + dropsToXrp(escrowData.Amount) + "`** XRP that will expire on **`" + rippleDateToReadable(escrowData.FinishAfter) + "`** and be credited into " + getAccountName(tx) + " **`" + escrowData.Destination + "`**.");
     commentDetails.push("");
 
+    let modifiedNode;
+    let escrowNode;
+
+    for (m in tx.meta.AffectedNodes) {
+        if (('ModifiedNode' in tx.meta.AffectedNodes[m]) && tx.meta.AffectedNodes[m].ModifiedNode.LedgerEntryType === 'AccountRoot') {
+            modifiedNode = tx.meta.AffectedNodes[m].ModifiedNode;
+        }
+
+        if (('CreatedNode' in tx.meta.AffectedNodes[m]) && tx.meta.AffectedNodes[m].CreatedNode.LedgerEntryType === 'Escrow') {
+            escrowNode = tx.meta.AffectedNodes[m].CreatedNode;
+        }
+    }
+
+    commentDetails.push("");
+    commentDetails.push("## Balance Changes");
+    commentDetails.push("| Step | Value |");
+    commentDetails.push("| :--- | ---: |")
+    commentDetails.push("| Starting Balance | `" + dropsToXrp(modifiedNode.PreviousFields.Balance) + "` |");
+    commentDetails.push("| Escrow Create | `-" + dropsToXrp(escrowNode.NewFields.Amount) + "` |");
+    commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
+    commentDetails.push("|  | -------------- |");
+    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(modifiedNode.FinalFields.Balance) + "`** |");
+    commentDetails.push("");
+
+    commentDetails.push("");
     commentDetails.push("## Signers");
 
     for (s in tx.Signers) {
@@ -268,13 +306,44 @@ let buildDetailedEscrowCreateExplanation = function(tx)
 let buildDetailedEscrowFinishExplanation = function(tx)
 {
     let commentDetails = [];
-/*
-    let escrowOwner = tx.specification.owner;
+
+    let escrowOwner = tx.rippleLib.specification.owner;
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** finished the escrow. Account " + getAccountName(tx) + " **`" + escrowOwner + "`** received **`" + tx.outcome.balanceChanges[escrowOwner][0].value + "`** " + tx.outcome.balanceChanges[escrowOwner][0].currency + ".");
+    commentDetails.push("Account " + getAccountName(tx.Account) + " **`" + tx.Account + "`** finished the escrow. Account " + getAccountName(escrowOwner) + " **`" + escrowOwner + "`** received **`" + tx.rippleLib.outcome.balanceChanges[escrowOwner][0].value + "`** " + tx.rippleLib.outcome.balanceChanges[escrowOwner][0].currency + ".");
     commentDetails.push("");
-*/
+
+    let modifiedNode;
+    let escrowNode;
+
+    for (m in tx.meta.AffectedNodes) {
+        if (('ModifiedNode' in tx.meta.AffectedNodes[m])
+            && tx.meta.AffectedNodes[m].ModifiedNode.LedgerEntryType === 'AccountRoot'
+            && tx.meta.AffectedNodes[m].ModifiedNode.FinalFields.Account === escrowOwner
+        ) {
+            modifiedNode = tx.meta.AffectedNodes[m].ModifiedNode;
+        }
+
+        if (('DeletedNode' in tx.meta.AffectedNodes[m]) && tx.meta.AffectedNodes[m].DeletedNode.LedgerEntryType === 'Escrow') {
+            escrowNode = tx.meta.AffectedNodes[m].DeletedNode;
+        }
+    }
+
+    commentDetails.push("");
+    commentDetails.push("## Balance Changes");
+    commentDetails.push("| Step | Value |");
+    commentDetails.push("| :--- | ---: |")
+    commentDetails.push("| Starting Balance | `" + dropsToXrp(modifiedNode.PreviousFields.Balance) + "` |");
+    commentDetails.push("| Escrow Release | `+" + dropsToXrp(escrowNode.FinalFields.Amount) + "` |");
+
+    if (tx.Account === tx.Owner) {
+        commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
+    }
+
+    commentDetails.push("|  | -------------- |");
+    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(modifiedNode.FinalFields.Balance) + "`** |");
+    commentDetails.push("");
+
     return commentDetails;
 };
 
@@ -296,13 +365,13 @@ let buildDetailedOfferCreateExplanation = function(tx)
     if (tx.TakerGets instanceof Object) {
         commentDetails.push("`TakerGets`: **`" + tx.TakerGets.value + "` " + tx.TakerGets.currency + "/" + tx.TakerGets.issuer + "**");
     } else {
-        commentDetails.push("`TakerGets`: **`" + (tx.TakerGets / 1000000) + "` XRP**");
+        commentDetails.push("`TakerGets`: **`" + dropsToXrp(tx.TakerGets) + "` XRP**");
     }
 
     if (tx.TakerPays instanceof Object) {
         commentDetails.push("`TakerPays`: **`" + tx.TakerPays.value + "` " + tx.TakerPays.currency + "/" + tx.TakerPays.issuer + "**");
     } else {
-        commentDetails.push("`TakerPays`: **`" + (tx.TakerPays / 1000000) + "` XRP**");
+        commentDetails.push("`TakerPays`: **`" + dropsToXrp(tx.TakerPays) + "` XRP**");
     }
 
     commentDetails.push("");
@@ -316,16 +385,16 @@ let buildDetailedPaymentExplanation = function(tx)
     let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** sent **`" + (tx.sup.deliveredAmount.value / 1000000) + "`** " + tx.sup.deliveredAmount.currency + " to " + getAccountName(tx) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : ""));
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** sent **`" + tx.rippleLib.outcome.deliveredAmount.value + "`** " + tx.rippleLib.outcome.deliveredAmount.currency + " to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + ".");
     commentDetails.push("");
 
     commentDetails.push("| Account | XRP Balance Before | XRP Balance After | Difference | Explanation |");
     commentDetails.push("| :--- | ---: | ---: | ---: | :--- |");
 
-    for (let i = 0; i < tx.meta.AffectedNodes.length; i++) {
+    for (i in tx.meta.AffectedNodes) {
 
         let account = tx.meta.AffectedNodes[i].ModifiedNode;
-        let difference = ((account.FinalFields.Balance - account.PreviousFields.Balance) / 1000000);
+        let difference = dropsToXrp(account.FinalFields.Balance - account.PreviousFields.Balance);
         let formattedDifference = difference;
 
         if (difference > 0) {
@@ -337,13 +406,13 @@ let buildDetailedPaymentExplanation = function(tx)
         if (i === 0) {
             explanation = "`" + difference + "` received from **`" + ellipsifyAccount(tx.Account) + "`**";
         } else if (i === 1) {
-            explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + ((tx.Fee / 1000000)) + "` fee";
+            explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + dropsToXrp(tx.Fee) + "` fee";
         }
 
-        commentDetails.push("| `" + ellipsifyAccount(account.FinalFields.Account) + "` | `" + (account.PreviousFields.Balance / 1000000) + "` | `" + (account.FinalFields.Balance / 1000000) + "` | `" + formattedDifference + "` | " + explanation + " |");
+        commentDetails.push("| `" + ellipsifyAccount(account.FinalFields.Account) + "` | `" + dropsToXrp(account.PreviousFields.Balance) + "` | `" + dropsToXrp(account.FinalFields.Balance) + "` | `" + formattedDifference + "` | " + explanation + " |");
     }
 
-    commentDetails.push("| | | | **`" + (tx.Fee / 1000000) + "`** | (the fee that was burned) |");
+    commentDetails.push("| | | | **`" + dropsToXrp(tx.Fee) + "`** | (the fee that was burned) |");
     commentDetails.push("");
 
     return commentDetails;
@@ -355,7 +424,7 @@ let buildDetailedPaymentChannelClaimExplanation = function(tx)
     let outcome = tx.outcome;
     let commentDetails = [];
 
-    commentDetails.push("The channel **`" + tx.specification.channel + "`** claimed **`" + (outcome.channelChanges.channelBalanceChangeDrops / 1000000) + "`** XRP.");
+    commentDetails.push("The channel **`" + tx.specification.channel + "`** claimed **`" + dropsToXrp(outcome.channelChanges.channelBalanceChangeDrops) + "`** XRP.");
 
     /*
     commentDetails.push("| Steps | Value |");
@@ -417,36 +486,26 @@ let ellipsifyAccount = function(account)
 
 let getTransaction = async function(hash) {
 
-    const response = await axios.post('https://xrpl.ws', {
-        "method": "tx",
-        "params": [
-            {
-                "transaction": hash,
-                "binary": false
-            }
-        ]
+    let api = new RippleAPI({
+        server: 'wss://xrpl.ws'
     });
 
-    response.data.result.sup = {};
+    await api.connect();
+    let response = await api.getTransaction(hash, {
+        includeRawTransaction: true
+    });
 
-    if (typeof response.data.result.date === 'number') {
-        response.data.result.sup.date = rippleDateToReadable(response.data.result.date);
-    } else if (typeof response.data.result.date === 'object') {
-        response.data.result.sup.date = response.data.result.date;
-    }
+    api.disconnect();
 
-    if (typeof response.data.result.meta.delivered_amount === 'string') {
-        response.data.result.sup.deliveredAmount = {
-            value: response.data.result.meta.delivered_amount,
-            currency: 'XRP'
-        };
-    } else if (typeof response.data.result.meta.delivered_amount === 'object') {
-        response.data.result.sup.deliveredAmount = response.data.result.meta.delivered_amount;
-    }
+    let originalTransaction = JSON.parse(response.rawTransaction);
+    let responseCopy = response;
+    delete responseCopy.rawTransaction;
 
-    console.log(util.inspect(response.data, false, null, true ));
+    originalTransaction.rippleLib = responseCopy;
 
-    return response.data;
+    console.log(util.inspect(originalTransaction, true, null, true));
+
+    return originalTransaction;
 }
 
 let linkToAccount = function(id)
@@ -460,8 +519,6 @@ let getAccountName = function(accountId)
         for (i in accountNamesJson) {
             accountNames[accountNamesJson[i].account] = accountNamesJson[i];
         }
-
-        console.log(accountNames);
     }
 
     if (!(accountId in accountNames)) {
@@ -482,4 +539,9 @@ let rippleDateToReadable = function(rippleDate)
     let epoch = moment.utc("2000-01-01T00:00:00");
     epoch.add(rippleDate, 's');
     return epoch.format();
+};
+
+let dropsToXrp = function(amount)
+{
+    return (amount / 1000000);
 };
