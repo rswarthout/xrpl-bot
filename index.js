@@ -1,6 +1,8 @@
-const WebSocket = require('ws');
 const axios = require('axios');
-const RippleAPI = require('ripple-lib').RippleAPI;
+const moment = require('moment');
+const util = require('util');
+const accountNamesJson = require('./account-names.json');
+const accountNames = {};
 
 module.exports = ({ app }) => {
 
@@ -25,7 +27,6 @@ let generateResponse = async function(context, body) {
     let mention = body.match(/(@xrpl\-bot)/i)
 
     if (mention === null) {
-        console.log('could not locate a metion of the bot');
         // There was no mention of the bot, exiting
         return;
     }
@@ -33,27 +34,26 @@ let generateResponse = async function(context, body) {
     let hash = body.match(/([\dA-Z]){64}/)
 
     if (hash === null) {
-        console.log('could not find a transaction hash');
         // We couldn't detect a transaction hash, exiting
         return;
     }
 
     hash = hash[0];
 
-    let response = await getTransaction(hash);
+    let tx = await getTransaction(hash);
     let commentDetails = [];
 
-    if (response.status === 'error') {
+    if (tx.status === 'error') {
         commentDetails.push("# Internal Error - Transaction Details");
         commentDetails.push("The transaction could not be returned at this time.");
     } else {
         commentDetails.push("# Transaction Details");
         commentDetails.push("**Hash:** [" + hash + "](https://xrpscan.com/tx/" + hash + ")");
-        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(response));
-        commentDetails.push.apply(commentDetails, await buildDetailExplanationForTransactionType(response));
+        commentDetails.push.apply(commentDetails, buildGeneralDetailsTable(tx.result));
+        commentDetails.push.apply(commentDetails, buildDetailExplanationForTransactionType(tx.result));
         commentDetails.push("## Transaction JSON");
         commentDetails.push("``` js ");
-        commentDetails.push(JSON.stringify(response, null, 2))
+        commentDetails.push(JSON.stringify(tx.result, null, 2))
         commentDetails.push("```");
     }
 
@@ -61,118 +61,123 @@ let generateResponse = async function(context, body) {
     return context.octokit.issues.createComment(issueComment);
 };
 
-let buildGeneralDetailsTable = function(result)
+let buildGeneralDetailsTable = function(tx)
 {
-    var commentDetails = [];
+    let epoch = moment.utc("2000-01-01");
+    epoch.add(tx.date, 's');
+
+    let commentDetails = [];
     commentDetails.push("| Property | Value |");
     commentDetails.push("| :--- | :--- |");
-    commentDetails.push("| Type | " + result.TransactionType + " |");
-    commentDetails.push("| Initiated By | " + linkToAccount(result.Account) + " |");
-    commentDetails.push("| Sequence | " + result.Sequence + " |");
-    commentDetails.push("| XRPL fee | " + (result.Fee / 1000000) + " XRP |");
-    commentDetails.push("| Date | " + result.date + " |");
+    commentDetails.push("| Type | " + tx.TransactionType + " |");
+    commentDetails.push("| Initiated By | " + linkToAccount(tx.Account) + " |");
+    commentDetails.push("| Sequence | " + tx.Sequence + " |");
+    commentDetails.push("| XRPL fee | " + (tx.Fee / 1000000) + " XRP |");
+    commentDetails.push("| Date | " + epoch.format() + " |");
     commentDetails.push("");
 
     return commentDetails;
 };
 
 // Function to handle routing to the correct transaction type handler
-let buildDetailExplanationForTransactionType = async function(result)
+let buildDetailExplanationForTransactionType = function(tx)
 {
-    switch (result.TransactionType) {
+    switch (tx.TransactionType) {
         case 'AccountSet':
-            return await buildDetailedAccountSetExplanation(result);
+            return buildDetailedAccountSetExplanation(tx);
 
         case 'AccountDelete':
-            return buildDetailedAccountDeleteExplanation(result);
+            return buildDetailedAccountDeleteExplanation(tx);
 
         case 'CheckCancel':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedCheckCancelExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedCheckCancelExplanation(tx);
 
         case 'CheckCash':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedCheckCashExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedCheckCashExplanation(tx);
 
         case 'CheckCreate':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedCheckCreateExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedCheckCreateExplanation(tx);
 
         case 'DepositPreauth':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedDepositPreauthExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedDepositPreauthExplanation(tx);
 
         case 'EscrowCancel':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedEscrowCancelExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedEscrowCancelExplanation(tx);
 
         case 'EscrowCreate':
-            return await buildDetailedEscrowCreateExplanation(result);
+            return buildDetailedEscrowCreateExplanation(tx);
 
         case 'EscrowFinish':
-            return await buildDetailedEscrowFinishExplanation(result);
+            return buildDetailedEscrowFinishExplanation(tx);
 
         case 'OfferCancel':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedOfferCancelExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedOfferCancelExplanation(tx);
 
         case 'OfferCreate':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedOfferCreateExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedOfferCreateExplanation(tx);
 
         case 'Payment':
-            return buildDetailedPaymentExplanation(result);
+            return buildDetailedPaymentExplanation(tx);
 
         case 'PaymentChannelClaim':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedPaymentChannelClaimExplanation(result);
+            return buildDetailedPaymentChannelClaimExplanation(tx);
 
         case 'PaymentChannelCreate':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedPaymentChannelCreateExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedPaymentChannelCreateExplanation(tx);
 
         case 'PaymentChannelFund':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedPaymentChannelFundExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedPaymentChannelFundExplanation(tx);
 
         case 'SetRegularKey':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedSetRegularKeyExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedSetRegularKeyExplanation(tx);
 
         case 'SignerListSet':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedSignerListSetExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedSignerListSetExplanation(tx);
 
         case 'TrustSet':
-            return buildNoSupportedExplanation(result);
-            //return buildDetailedTrustSetExplanation(result);
+            return buildNoSupportedExplanation(tx);
+            //return buildDetailedTrustSetExplanation(tx);
     }
 };
 
-let buildNoSupportedExplanation = function(result)
+let buildNoSupportedExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("The transaction type of **`" + result.TransactionType + "`** is not currently supported for a detailed explanation.");
+    commentDetails.push("The transaction type of **`" + tx.TransactionType + "`** is not currently supported for a detailed explanation.");
     commentDetails.push("");
 
     return commentDetails;
 };
 
 // Transaction Type: AccountSet
-let buildDetailedAccountSetExplanation = async function(result)
+let buildDetailedAccountSetExplanation = function(tx)
 {
-    var rippleLibResponse = await getRippleLibResponse(result.hash);
-    var commentDetails = [];
+    let commentDetails = [];
 
-    commentDetails.push("## Specification");
+    commentDetails.push("## Changes");
     commentDetails.push("| Property | Value |");
     commentDetails.push("| :--- | :--- |");
 
-    for (key in rippleLibResponse.specification) {
-        commentDetails.push("| `" + key + "` | `" + rippleLibResponse.specification[key] + "` |");
+    /*
+    @TODO deal with exposing the fields changed.
+
+    for (key in result.specification) {
+        commentDetails.push("| `" + key + "` | `" + tx.specification[key] + "` |");
     }
+    */
 
     commentDetails.push("");
 
@@ -180,109 +185,124 @@ let buildDetailedAccountSetExplanation = async function(result)
 };
 
 // Transaction Type: AccountDelete
-let buildDetailedAccountDeleteExplanation = function(result)
+let buildDetailedAccountDeleteExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** was **DELETED**. The remaining **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " were sent to " + getDestinationAccountName(result) + " **`" + result.Destination + "`**" + (('DestinationTag' in result) ? " (DT: `" + result.DestinationTag + "`)" : ""));
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** was **DELETED**. The remaining **`" + (tx.sup.deliveredAmount.value / 1000000) + "`** " + tx.sup.deliveredAmount.currency + " were sent to " + getAccountName(tx) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : ""));
     commentDetails.push("");
 
     return commentDetails;
 };
 
 // Transaction Type: CheckCancel
-let buildDetailedCheckCancelExplanation = function(result)
+let buildDetailedCheckCancelExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: CheckCash
-let buildDetailedCheckCashExplanation = function(result)
+let buildDetailedCheckCashExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: CheckCreate
-let buildDetailedCheckCreateExplanation = function(result)
+let buildDetailedCheckCreateExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: DepositPreauth
-let buildDetailedDepositPreauthExplanation = function(result)
+let buildDetailedDepositPreauthExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: EscrowCancel
-let buildDetailedEscrowCancelExplanation = function(result)
+let buildDetailedEscrowCancelExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: EscrowCreate
-let buildDetailedEscrowCreateExplanation = async function(result)
+let buildDetailedEscrowCreateExplanation = function(tx)
 {
-    var rippleLibResponse = await getRippleLibResponse(result.hash);
-    var commentDetails = [];
+    let commentDetails = [];
+    let escrowData;
+
+    for (i in tx.meta.AffectedNodes) {
+        if ('CreatedNode' in tx.meta.AffectedNodes[i]) {
+            escrowData = tx.meta.AffectedNodes[i].CreatedNode.NewFields;
+            break;
+        }
+    }
 
     commentDetails.push("");
-    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** created an escrow for **`" + rippleLibResponse.specification.amount + "`** XRP that will expire on `" + rippleLibResponse.specification.allowExecuteAfter + "` and be credited into " + getDestinationAccountName(result) + " **`" + rippleLibResponse.specification.destination + "`**.");
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + escrowData.Account + "`** created an escrow for **`" + (escrowData.Amount / 1000000) + "`** XRP that will expire on `" + rippleDateToReadable(escrowData.FinishAfter) + "` and be credited into " + getAccountName(tx) + " **`" + escrowData.Destination + "`**.");
+    commentDetails.push("");
+
+    commentDetails.push("## Signers");
+
+    for (s in tx.Signers) {
+        commentDetails.push("* " + getAccountName(tx.Signers[s].Signer.Account) + " " + linkToAccount(tx.Signers[s].Signer.Account));
+    }
+
     commentDetails.push("");
 
     return commentDetails;
 };
 
 // Transaction Type: EscrowFinish
-let buildDetailedEscrowFinishExplanation = async function(result)
+let buildDetailedEscrowFinishExplanation = function(tx)
 {
-    var rippleLibResponse = await getRippleLibResponse(result.hash);
-    var commentDetails = [];
-    var escrowOwner = rippleLibResponse.specification.owner;
+    let commentDetails = [];
+/*
+    let escrowOwner = tx.specification.owner;
 
     commentDetails.push("");
-    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** finished the escrow. Account " + getDestinationAccountName(result) + " **`" + escrowOwner + "`** received **`" + rippleLibResponse.outcome.balanceChanges[escrowOwner][0].value + "`** " + rippleLibResponse.outcome.balanceChanges[escrowOwner][0].currency + ".");
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** finished the escrow. Account " + getAccountName(tx) + " **`" + escrowOwner + "`** received **`" + tx.outcome.balanceChanges[escrowOwner][0].value + "`** " + tx.outcome.balanceChanges[escrowOwner][0].currency + ".");
     commentDetails.push("");
-
+*/
     return commentDetails;
 };
 
 // Transaction Type: OfferCancel
-let buildDetailedOfferCancelExplanation = function(result)
+let buildDetailedOfferCancelExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: OfferCreate
-let buildDetailedOfferCreateExplanation = function(result)
+let buildDetailedOfferCreateExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
-    commentDetails.push("**`" + result.Account + "`** placed an offer:");
+    commentDetails.push("**`" + tx.Account + "`** placed an offer:");
 
-    if (result.TakerGets instanceof Object) {
-        commentDetails.push("`TakerGets`: **`" + result.TakerGets.value + "` " + result.TakerGets.currency + "/" + result.TakerGets.issuer + "**");
+    if (tx.TakerGets instanceof Object) {
+        commentDetails.push("`TakerGets`: **`" + tx.TakerGets.value + "` " + tx.TakerGets.currency + "/" + tx.TakerGets.issuer + "**");
     } else {
-        commentDetails.push("`TakerGets`: **`" + (result.TakerGets / 1000000) + "` XRP**");
+        commentDetails.push("`TakerGets`: **`" + (tx.TakerGets / 1000000) + "` XRP**");
     }
 
-    if (result.TakerPays instanceof Object) {
-        commentDetails.push("`TakerPays`: **`" + result.TakerPays.value + "` " + result.TakerPays.currency + "/" + result.TakerPays.issuer + "**");
+    if (tx.TakerPays instanceof Object) {
+        commentDetails.push("`TakerPays`: **`" + tx.TakerPays.value + "` " + tx.TakerPays.currency + "/" + tx.TakerPays.issuer + "**");
     } else {
-        commentDetails.push("`TakerPays`: **`" + (result.TakerPays / 1000000) + "` XRP**");
+        commentDetails.push("`TakerPays`: **`" + (tx.TakerPays / 1000000) + "` XRP**");
     }
 
     commentDetails.push("");
@@ -291,88 +311,101 @@ let buildDetailedOfferCreateExplanation = function(result)
 };
 
 // Transaction Type: Payment - currently only supports a transfer from one account to another.
-let buildDetailedPaymentExplanation = function(result)
+let buildDetailedPaymentExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account " + getTransactionAccountName(result) + " **`" + result.Account + "`** sent **`" + (result.meta.delivered_amount.value / 1000000) + "`** " + result.meta.delivered_amount.currency + " to " + getDestinationAccountName(result) + " **`" + result.Destination + "`**" + (('DestinationTag' in result) ? " (DT: `" + result.DestinationTag + "`)" : ""));
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** sent **`" + (tx.sup.deliveredAmount.value / 1000000) + "`** " + tx.sup.deliveredAmount.currency + " to " + getAccountName(tx) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : ""));
     commentDetails.push("");
 
     commentDetails.push("| Account | XRP Balance Before | XRP Balance After | Difference | Explanation |");
     commentDetails.push("| :--- | ---: | ---: | ---: | :--- |");
 
-    for (var i = 0; i < result.meta.AffectedNodes.length; i++) {
+    for (let i = 0; i < tx.meta.AffectedNodes.length; i++) {
 
-        var account = result.meta.AffectedNodes[i].ModifiedNode;
-        var difference = ((account.FinalFields.Balance - account.PreviousFields.Balance) / 1000000);
-        var formattedDifference = difference;
+        let account = tx.meta.AffectedNodes[i].ModifiedNode;
+        let difference = ((account.FinalFields.Balance - account.PreviousFields.Balance) / 1000000);
+        let formattedDifference = difference;
 
         if (difference > 0) {
             formattedDifference = "+" + difference;
         }
 
-        var explanation = '';
+        let explanation = '';
 
         if (i === 0) {
-            explanation = "`" + difference + "` received from **`" + ellipsifyAccount(result.Account) + "`**";
+            explanation = "`" + difference + "` received from **`" + ellipsifyAccount(tx.Account) + "`**";
         } else if (i === 1) {
-            explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(result.Destination) + "`** + `" + ((result.Fee / 1000000)) + "` fee";
+            explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + ((tx.Fee / 1000000)) + "` fee";
         }
 
         commentDetails.push("| `" + ellipsifyAccount(account.FinalFields.Account) + "` | `" + (account.PreviousFields.Balance / 1000000) + "` | `" + (account.FinalFields.Balance / 1000000) + "` | `" + formattedDifference + "` | " + explanation + " |");
     }
 
-    commentDetails.push("| | | | **`" + (result.Fee / 1000000) + "`** | (the fee that was burned) |");
+    commentDetails.push("| | | | **`" + (tx.Fee / 1000000) + "`** | (the fee that was burned) |");
     commentDetails.push("");
 
     return commentDetails;
 };
 
 // Transaction Type: PaymentChanncelClaim
-let buildDetailedPaymentChannelClaimExplanation = function(result)
+let buildDetailedPaymentChannelClaimExplanation = function(tx)
 {
-    var commentDetails = [];
+    let outcome = tx.outcome;
+    let commentDetails = [];
+
+    commentDetails.push("The channel **`" + tx.specification.channel + "`** claimed **`" + (outcome.channelChanges.channelBalanceChangeDrops / 1000000) + "`** XRP.");
+
+    /*
+    commentDetails.push("| Steps | Value |");
+    commentDetails.push("| :--- | ---: |");
+    commentDetails.push("| Account Balance Before | " +  + " |");
+    commentDetails.push("| Claimed Amount | +" + outcome.balanceChanges[tx.address][0].value + " |");
+    commentDetails.push("| Transaction Fee | `-" + outcome.fee + "` |");
+    commentDetails.push("| | -------- |");
+    commentDetails.push("| txing Account Balance | " +  + " |");
+    */
 
     return commentDetails;
 };
 
 // Transaction Type: PaymentChannelCreate
-let buildDetailedPaymentChannelCreateExplanation = function(result)
+let buildDetailedPaymentChannelCreateExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: PaymentChannelFund
-let buildDetailedPaymentChannelFundExplanation = function(result)
+let buildDetailedPaymentChannelFundExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: SetRegularKey
-let buildDetailedSetRegularKeyExplanation = function(result)
+let buildDetailedSetRegularKeyExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: SignerListSet
-let buildDetailedSignerListSetExplanation = function(result)
+let buildDetailedSignerListSetExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
 
 // Transaction Type: TrustSet
-let buildDetailedTrustSetExplanation = function(result)
+let buildDetailedTrustSetExplanation = function(tx)
 {
-    var commentDetails = [];
+    let commentDetails = [];
 
     return commentDetails;
 };
@@ -383,30 +416,37 @@ let ellipsifyAccount = function(account)
 };
 
 let getTransaction = async function(hash) {
-    return await new Promise((resolve) => {
-        axios
-            .get("https://api.xrpscan.com/api/v1/tx/" + hash)
-            .then(function (response) {
-                resolve(response.data);
-            })
-            .catch(function(error) {
-                console.log(error);
-            });
-    });
-};
 
-let getRippleLibResponse = async function(hash) {
-    return await new Promise((resolve) => {
-        const api = new RippleAPI({
-                server: 'wss://xrpl.ws'
-            });
-            api.on('error', (errorCode, errorMessage) => {
-                console.log(errorCode + ': ' + errorMessage);
-            });
-            api.connect().then(() => {
-                resolve(api.getTransaction(hash));
-            }).catch(console.error);
-    })
+    const response = await axios.post('https://xrpl.ws', {
+        "method": "tx",
+        "params": [
+            {
+                "transaction": hash,
+                "binary": false
+            }
+        ]
+    });
+
+    response.data.result.sup = {};
+
+    if (typeof response.data.result.date === 'number') {
+        response.data.result.sup.date = rippleDateToReadable(response.data.result.date);
+    } else if (typeof response.data.result.date === 'object') {
+        response.data.result.sup.date = response.data.result.date;
+    }
+
+    if (typeof response.data.result.meta.delivered_amount === 'string') {
+        response.data.result.sup.deliveredAmount = {
+            value: response.data.result.meta.delivered_amount,
+            currency: 'XRP'
+        };
+    } else if (typeof response.data.result.meta.delivered_amount === 'object') {
+        response.data.result.sup.deliveredAmount = response.data.result.meta.delivered_amount;
+    }
+
+    console.log(util.inspect(response.data, false, null, true ));
+
+    return response.data;
 }
 
 let linkToAccount = function(id)
@@ -414,52 +454,32 @@ let linkToAccount = function(id)
     return "[" + id + "](https://xrpscan.com/account/" + id + ")";
 };
 
-let getTransactionAccountName = function(response)
+let getAccountName = function(accountId)
 {
-    if (!('AccountName' in response)) {
+    if (Object.keys(accountNames).length === 0) {
+        for (i in accountNamesJson) {
+            accountNames[accountNamesJson[i].account] = accountNamesJson[i];
+        }
+
+        console.log(accountNames);
+    }
+
+    if (!(accountId in accountNames)) {
         return "";
     }
 
-    if (response.AccountName === null) {
-        return "";
+    let name = accountNames[accountId].name;
+
+    if ('desc' in accountNames[accountId]) {
+        name += " (" + accountNames[accountId].desc + ")"
     }
 
-    if (response.AccountName.verified === false) {
-        return "";
-    }
-
-    var name = response.AccountName.name;
-
-    if ('desc' in response.AccountName) {
-        name += " (" + response.AccountName.desc + ")"
-    }
-
-    name = "[" + name + "](https://xrpscan.com/account/" + response.Account + ")";
-
-    return name;
+    return "[" + name + "](https://xrpscan.com/account/" + accountId + ")";
 };
 
-let getDestinationAccountName = function(response)
+let rippleDateToReadable = function(rippleDate)
 {
-    if (!('DestinationName' in response)) {
-        return "";
-    }
-
-    if (response.DestinationName === null) {
-        return "";
-    }
-
-    if (response.DestinationName.verified === false) {
-        return "";
-    }
-
-    var name = response.DestinationName.name;
-
-    if ('desc' in response.DestinationName) {
-        name += " (" + response.DestinationName.desc + ")"
-    }
-
-    name = "[" + name + "](https://xrpscan.com/account/" + response.Destination + ")";
-
-    return name;
+    let epoch = moment.utc("2000-01-01T00:00:00");
+    epoch.add(rippleDate, 's');
+    return epoch.format();
 };
