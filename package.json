@@ -13,7 +13,7 @@
     "deploy": "serverless deploy -v"
   },
   "dependencies": {
-    "@probot/serverless-lambda": "^1.0.0",
+    "@probot/serverless-lambda": "^1.0.2",
     "moment": "^2.29.1",
     "probot": "^10.9.3",
     "ripple-lib": "^1.8.2",
