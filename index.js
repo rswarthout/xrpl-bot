@@ -24,22 +24,13 @@ module.exports = ({ app }) => {
 
 let generateResponse = async function(context, body) {
 
-    // Let's first check for the @mention of @xrpl-bot
-    let mention = body.match(/(@xrpl\-bot)/i)
+    let match = body.match(/(@xrpl\-bot)[\s\n\r]+([\dA-Z]{64})/i);
 
-    if (mention === null) {
-        // There was no mention of the bot, exiting
+    if (match === null) {
         return;
     }
 
-    let hash = body.match(/([\dA-Z]){64}/)
-
-    if (hash === null) {
-        // We couldn't detect a transaction hash, exiting
-        return;
-    }
-
-    hash = hash[0];
+    hash = match[2];
 
     let tx = await getTransaction(hash);
     let commentDetails = [];
@@ -516,7 +507,9 @@ let getTransaction = async function(hash) {
 
     originalTransaction.rippleLib = responseCopy;
 
-    console.log(util.inspect(originalTransaction, true, null, true));
+    if (process.env.ENVIRONMENT === 'development') {
+        console.log(util.inspect(originalTransaction, true, null, true));
+    }
 
     return originalTransaction;
 }
