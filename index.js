@@ -72,6 +72,7 @@ let buildGeneralDetailsTable = function(tx)
     commentDetails.push("| Sequence | " + tx.Sequence + " |");
     commentDetails.push("| XRPL fee | " + dropsToXrp(tx.Fee) + " XRP |");
     commentDetails.push("| Date | " + rippleDateToReadable(tx.date) + " |");
+    commentDetails.push("| Validated | " + ((tx.validated) ? "`true`" : "`false`") + " |");
     commentDetails.push("");
 
     return commentDetails;
@@ -114,12 +115,10 @@ let buildDetailExplanationForTransactionType = function(tx)
             return buildDetailedEscrowFinishExplanation(tx);
 
         case 'OfferCancel':
-            return buildNoSupportedExplanation(tx);
-            //return buildDetailedOfferCancelExplanation(tx);
+            return buildDetailedOfferCancelExplanation(tx);
 
         case 'OfferCreate':
-            return buildNoSupportedExplanation(tx);
-            //return buildDetailedOfferCreateExplanation(tx);
+            return buildDetailedOfferCreateExplanation(tx);
 
         case 'Payment':
             return buildDetailedPaymentExplanation(tx);
@@ -351,6 +350,21 @@ let buildDetailedEscrowFinishExplanation = function(tx)
 let buildDetailedOfferCancelExplanation = function(tx)
 {
     let commentDetails = [];
+    let change;
+
+    commentDetails.push("");
+    commentDetails.push("## Orderbook Changes");
+    commentDetails.push("| Direction | Quantity | Price | Status | Exchange Rate |");
+    commentDetails.push("| :--- | :--- | :--- | :--- | :--- |");
+
+    for (accountId in tx.rippleLib.outcome.orderbookChanges) {
+        for (i in tx.rippleLib.outcome.orderbookChanges[accountId]) {
+            change = tx.rippleLib.outcome.orderbookChanges[accountId][i];
+            commentDetails.push("| " + change.direction + " | `" + change.quantity.value + "` `" + change.quantity.currency + " / " + change.quantity.counterparty + "` | `" + change.totalPrice.value + "` " + change.totalPrice.currency + " | `" + change.status + "` | `" + change.makerExchangeRate + "` |");
+        }
+    }
+
+    commentDetails.push("");
 
     return commentDetails;
 };
@@ -359,19 +373,18 @@ let buildDetailedOfferCancelExplanation = function(tx)
 let buildDetailedOfferCreateExplanation = function(tx)
 {
     let commentDetails = [];
+    let change;
 
-    commentDetails.push("**`" + tx.Account + "`** placed an offer:");
+    commentDetails.push("");
+    commentDetails.push("## Orderbook Changes");
+    commentDetails.push("| Direction | Quantity | Price | Status | Exchange Rate |");
+    commentDetails.push("| :--- | :--- | :--- | :--- | :--- |");
 
-    if (tx.TakerGets instanceof Object) {
-        commentDetails.push("`TakerGets`: **`" + tx.TakerGets.value + "` " + tx.TakerGets.currency + "/" + tx.TakerGets.issuer + "**");
-    } else {
-        commentDetails.push("`TakerGets`: **`" + dropsToXrp(tx.TakerGets) + "` XRP**");
-    }
-
-    if (tx.TakerPays instanceof Object) {
-        commentDetails.push("`TakerPays`: **`" + tx.TakerPays.value + "` " + tx.TakerPays.currency + "/" + tx.TakerPays.issuer + "**");
-    } else {
-        commentDetails.push("`TakerPays`: **`" + dropsToXrp(tx.TakerPays) + "` XRP**");
+    for (accountId in tx.rippleLib.outcome.orderbookChanges) {
+        for (i in tx.rippleLib.outcome.orderbookChanges[accountId]) {
+            change = tx.rippleLib.outcome.orderbookChanges[accountId][i];
+            commentDetails.push("| " + change.direction + " | `" + change.quantity.value + "` `" + change.quantity.currency + " / " + change.quantity.counterparty + "` | `" + change.totalPrice.value + "` " + change.totalPrice.currency + " | `" + change.status + "` | `" + change.makerExchangeRate + "` |");
+        }
     }
 
     commentDetails.push("");
