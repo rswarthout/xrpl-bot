@@ -442,7 +442,7 @@
   resolved "https://registry.yarnpkg.com/@pika/types/-/types-0.9.2.tgz#60ad16afe1293878232e28937d9007340c59ff7c"
   integrity sha512-AzZTkHtM0A67+xMVhmSeJDteSMS+RfXGuM+/oVbo1PGD19ic7fuimv5b0TW8dKoZuxpVxiwVAai+sFRSNmfI3g==
 
-"@probot/get-private-key@^1.0.0":
+"@probot/get-private-key@^1.0.0", "@probot/get-private-key@^1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@probot/get-private-key/-/get-private-key-1.1.0.tgz#d29abe3d2b5130701234dc23d0cd2f220f55bbc1"
   integrity sha512-qWOBN8LaJNk1YuKJ1kJJLjevrkekQPGfaouTWEUkpP1tABrGWic9uqEpDMrtbohdPvXjDfv3JgqS8pXkmuO/BQ==
@@ -469,10 +469,12 @@
     readable-stream "^3.6.0"
     split2 "^3.2.2"
 
-"@probot/serverless-lambda@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@probot/serverless-lambda/-/serverless-lambda-1.0.0.tgz#1ecf710d40dbead6642ea12b0aa1aab89b2e0579"
-  integrity sha512-Rs9PgPqqeEXFCMB8FXf4f+dWYi7LHEw5WzgojC+8DXLgGuQjrrbZA201tkhpB2erinrwtB7SfVaSdIYV2ze8LA==
+"@probot/serverless-lambda@^1.0.2":
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/@probot/serverless-lambda/-/serverless-lambda-1.0.2.tgz#90b9f8542d73dbdf1663ab8a6405f971c09b6811"
+  integrity sha512-yiS068R2hXUeBlApP4t9t6TEcnbNt/03lOYxKkTaVnajY/BF0t4U2xzllafxr7rCfGfxDq4LWw1ZZc+OzhUGSQ==
+  dependencies:
+    "@probot/get-private-key" "^1.1.0"
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
