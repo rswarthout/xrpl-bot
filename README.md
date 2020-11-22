@@ -4,7 +4,7 @@
 
 ## Privacy Policy
 
-[Privacy Policy](PRIVAY_POLICY)
+[Privacy Policy](PRIVACY_POLICY)
 
 ## License
 
