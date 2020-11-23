@@ -45,6 +45,11 @@ let generateResponse = async function(context, body) {
         commentDetails.push.apply(commentDetails, buildDetailExplanationForTransactionType(tx));
         commentDetails.push("## Transaction JSON");
         commentDetails.push("``` js ");
+
+        if (process.env.ENVIRONMENT !== 'development') {
+            delete tx.rippleLib;
+        }
+
         commentDetails.push(JSON.stringify(tx, null, 2))
         commentDetails.push("```");
     }
@@ -396,24 +401,37 @@ let buildDetailedPaymentExplanation = function(tx)
     commentDetails.push("| :--- | ---: | ---: | ---: | :--- |");
 
     for (i in tx.meta.AffectedNodes) {
+        let account;
+        let accountId;
+        let previousBalance;
+        let finalBalance;
+        let difference;
+        let explanation;
 
-        let account = tx.meta.AffectedNodes[i].ModifiedNode;
-        let difference = dropsToXrp(account.FinalFields.Balance - account.PreviousFields.Balance);
+        if ('ModifiedNode' in tx.meta.AffectedNodes[i]) {
+            account = tx.meta.AffectedNodes[i].ModifiedNode;
+            accountId = account.FinalFields.Account;
+            previousBalance = account.PreviousFields.Balance;
+            finalBalance = account.FinalFields.Balance;
+            difference = dropsToXrp(account.FinalFields.Balance - account.PreviousFields.Balance);
+        } else if ('CreatedNode' in tx.meta.AffectedNodes[i]) {
+            account = tx.meta.AffectedNodes[i].CreatedNode;
+            accountId = account.NewFields.Account;
+            previousBalance = 0;
+            finalBalance = account.NewFields.Balance;
+            difference = dropsToXrp(account.NewFields.Balance);
+        }
+
         let formattedDifference = difference;
 
         if (difference > 0) {
-            formattedDifference = "+" + difference;
-        }
-
-        let explanation = '';
-
-        if (i === 0) {
+            formattedDifference = "+" + formattedDifference;
             explanation = "`" + difference + "` received from **`" + ellipsifyAccount(tx.Account) + "`**";
-        } else if (i === 1) {
+        } else {
             explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + dropsToXrp(tx.Fee) + "` fee";
         }
 
-        commentDetails.push("| `" + ellipsifyAccount(account.FinalFields.Account) + "` | `" + dropsToXrp(account.PreviousFields.Balance) + "` | `" + dropsToXrp(account.FinalFields.Balance) + "` | `" + formattedDifference + "` | " + explanation + " |");
+        commentDetails.push("| `" + ellipsifyAccount(accountId) + "` | `" + dropsToXrp(previousBalance) + "` | `" + dropsToXrp(finalBalance) + "` | `" + formattedDifference + "` | " + explanation + " |");
     }
 
     commentDetails.push("| | | | **`" + dropsToXrp(tx.Fee) + "`** | (the fee that was burned) |");
