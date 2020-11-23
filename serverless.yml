@@ -23,6 +23,7 @@ frameworkVersion: '2'
 provider:
   name: aws
   runtime: nodejs12.x
+  memorySize: 512
   stage: v1
   profile: xrpl-bot-serverless
   apiGateway:
