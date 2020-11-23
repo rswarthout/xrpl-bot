@@ -54,6 +54,7 @@ functions:
       APP_ID: ${ssm:/xrpl-bot-app-id~true}
       WEBHOOK_SECRET: ${ssm:/xrpl-bot-webhook-secret~true}
       PRIVATE_KEY: ${ssm:/xrpl-bot-private-key~true}
+      ENVIRONMENT: production
 
 
 #    The following are a few example events you can configure

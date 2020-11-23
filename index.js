@@ -194,11 +194,11 @@ let buildDetailedAccountDeleteExplanation = function(tx)
     commentDetails.push("## Balance Changes");
     commentDetails.push("| Step | Value |");
     commentDetails.push("| :--- | ---: |")
-    commentDetails.push("| Starting Balance | `" + dropsToXrp(deletedNode.PreviousFields.Balance) + "` |");
+    commentDetails.push("| Starting Balance | `" + numberWithCommas(dropsToXrp(deletedNode.PreviousFields.Balance)) + "` |");
     commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
-    commentDetails.push("| Sent to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + " | `-" + dropsToXrp(tx.meta.DeliveredAmount) + "` |");
+    commentDetails.push("| Sent to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + " | `-" + numberWithCommas(dropsToXrp(tx.meta.DeliveredAmount)) + "` |");
     commentDetails.push("|  | -------------- |");
-    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(deletedNode.FinalFields.Balance) + "`** |");
+    commentDetails.push("| Resulting Balance | **`" + numberWithCommas(dropsToXrp(deletedNode.FinalFields.Balance)) + "`** |");
     commentDetails.push("");
 
     return commentDetails;
@@ -258,7 +258,7 @@ let buildDetailedEscrowCreateExplanation = function(tx)
     }
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + escrowData.Account + "`** created an escrow for **`" + dropsToXrp(escrowData.Amount) + "`** XRP that will expire on **`" + rippleDateToReadable(escrowData.FinishAfter) + "`** and be credited into " + getAccountName(tx) + " **`" + escrowData.Destination + "`**.");
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + escrowData.Account + "`** created an escrow for **`" + numberWithCommas(dropsToXrp(escrowData.Amount)) + "`** XRP that will expire on **`" + rippleDateToReadable(escrowData.FinishAfter) + "`** and be credited into " + getAccountName(tx) + " **`" + escrowData.Destination + "`**.");
     commentDetails.push("");
 
     let modifiedNode;
@@ -278,11 +278,11 @@ let buildDetailedEscrowCreateExplanation = function(tx)
     commentDetails.push("## Balance Changes");
     commentDetails.push("| Step | Value |");
     commentDetails.push("| :--- | ---: |")
-    commentDetails.push("| Starting Balance | `" + dropsToXrp(modifiedNode.PreviousFields.Balance) + "` |");
-    commentDetails.push("| Escrow Create | `-" + dropsToXrp(escrowNode.NewFields.Amount) + "` |");
+    commentDetails.push("| Starting Balance | `" + numberWithCommas(dropsToXrp(modifiedNode.PreviousFields.Balance)) + "` |");
+    commentDetails.push("| Escrow Create | `-" + numberWithCommas(dropsToXrp(escrowNode.NewFields.Amount)) + "` |");
     commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
     commentDetails.push("|  | -------------- |");
-    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(modifiedNode.FinalFields.Balance) + "`** |");
+    commentDetails.push("| Resulting Balance | **`" + numberWithCommas(dropsToXrp(modifiedNode.FinalFields.Balance)) + "`** |");
     commentDetails.push("");
 
     commentDetails.push("");
@@ -305,7 +305,7 @@ let buildDetailedEscrowFinishExplanation = function(tx)
     let escrowOwner = tx.rippleLib.specification.owner;
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx.Account) + " **`" + tx.Account + "`** finished the escrow. Account " + getAccountName(escrowOwner) + " **`" + escrowOwner + "`** received **`" + tx.rippleLib.outcome.balanceChanges[escrowOwner][0].value + "`** " + tx.rippleLib.outcome.balanceChanges[escrowOwner][0].currency + ".");
+    commentDetails.push("Account " + getAccountName(tx.Account) + " **`" + tx.Account + "`** finished the escrow. Account " + getAccountName(escrowOwner) + " **`" + escrowOwner + "`** received **`" + numberWithCommas(tx.rippleLib.outcome.balanceChanges[escrowOwner][0].value) + "`** " + tx.rippleLib.outcome.balanceChanges[escrowOwner][0].currency + ".");
     commentDetails.push("");
 
     let modifiedNode;
@@ -328,15 +328,15 @@ let buildDetailedEscrowFinishExplanation = function(tx)
     commentDetails.push("## Balance Changes");
     commentDetails.push("| Step | Value |");
     commentDetails.push("| :--- | ---: |")
-    commentDetails.push("| Starting Balance | `" + dropsToXrp(modifiedNode.PreviousFields.Balance) + "` |");
-    commentDetails.push("| Escrow Release | `+" + dropsToXrp(escrowNode.FinalFields.Amount) + "` |");
+    commentDetails.push("| Starting Balance | `" + numberWithCommas(dropsToXrp(modifiedNode.PreviousFields.Balance)) + "` |");
+    commentDetails.push("| Escrow Release | `+" + numberWithCommas(dropsToXrp(escrowNode.FinalFields.Amount)) + "` |");
 
     if (tx.Account === tx.Owner) {
         commentDetails.push("| Transaction Fee | `-" + dropsToXrp(tx.Fee) + "` |");
     }
 
     commentDetails.push("|  | -------------- |");
-    commentDetails.push("| Resulting Balance | **`" + dropsToXrp(modifiedNode.FinalFields.Balance) + "`** |");
+    commentDetails.push("| Resulting Balance | **`" + numberWithCommas(dropsToXrp(modifiedNode.FinalFields.Balance)) + "`** |");
     commentDetails.push("");
 
     return commentDetails;
@@ -356,7 +356,7 @@ let buildDetailedOfferCancelExplanation = function(tx)
     for (accountId in tx.rippleLib.outcome.orderbookChanges) {
         for (i in tx.rippleLib.outcome.orderbookChanges[accountId]) {
             change = tx.rippleLib.outcome.orderbookChanges[accountId][i];
-            commentDetails.push("| " + change.direction + " | `" + change.quantity.value + "` `" + change.quantity.currency + " / " + change.quantity.counterparty + "` | `" + change.totalPrice.value + "` " + change.totalPrice.currency + " | `" + change.status + "` | `" + change.makerExchangeRate + "` |");
+            commentDetails.push("| " + change.direction + " | `" + numberWithCommas(change.quantity.value) + "` `" + change.quantity.currency + " / " + change.quantity.counterparty + "` | `" + numberWithCommas(change.totalPrice.value) + "` " + change.totalPrice.currency + " | `" + change.status + "` | `" + numberWithCommas(change.makerExchangeRate) + "` |");
         }
     }
 
@@ -373,13 +373,13 @@ let buildDetailedOfferCreateExplanation = function(tx)
 
     commentDetails.push("");
     commentDetails.push("## Orderbook Changes");
-    commentDetails.push("| Direction | Quantity | Price | Status | Exchange Rate |");
+    commentDetails.push("| Direction | Price | Quantity | Status | Exchange Rate |");
     commentDetails.push("| :--- | :--- | :--- | :--- | :--- |");
 
     for (accountId in tx.rippleLib.outcome.orderbookChanges) {
         for (i in tx.rippleLib.outcome.orderbookChanges[accountId]) {
             change = tx.rippleLib.outcome.orderbookChanges[accountId][i];
-            commentDetails.push("| " + change.direction + " | `" + change.quantity.value + "` `" + change.quantity.currency + " / " + change.quantity.counterparty + "` | `" + change.totalPrice.value + "` " + change.totalPrice.currency + " | `" + change.status + "` | `" + change.makerExchangeRate + "` |");
+            commentDetails.push("| " + change.direction + " | `" + numberWithCommas(change.totalPrice.value) + "` `" + change.totalPrice.currency + " / " + change.totalPrice.counterparty + "` | `" + numberWithCommas(change.quantity.value) + "` " + change.quantity.currency + " | `" + change.status + "` | `" + numberWithCommas(change.makerExchangeRate) + "` |");
         }
     }
 
@@ -394,7 +394,7 @@ let buildDetailedPaymentExplanation = function(tx)
     let commentDetails = [];
 
     commentDetails.push("");
-    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** sent **`" + tx.rippleLib.outcome.deliveredAmount.value + "`** " + tx.rippleLib.outcome.deliveredAmount.currency + " to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + ".");
+    commentDetails.push("Account " + getAccountName(tx) + " **`" + tx.Account + "`** sent **`" + numberWithCommas(tx.rippleLib.outcome.deliveredAmount.value) + "`** " + tx.rippleLib.outcome.deliveredAmount.currency + " to " + getAccountName(tx.Destination) + " **`" + tx.Destination + "`**" + (('DestinationTag' in tx) ? " (DT: `" + tx.DestinationTag + "`)" : "") + ".");
     commentDetails.push("");
 
     commentDetails.push("| Account | XRP Balance Before | XRP Balance After | Difference | Explanation |");
@@ -422,16 +422,16 @@ let buildDetailedPaymentExplanation = function(tx)
             difference = dropsToXrp(account.NewFields.Balance);
         }
 
-        let formattedDifference = difference;
+        let formattedDifference = numberWithCommas(difference);
 
         if (difference > 0) {
-            formattedDifference = "+" + formattedDifference;
-            explanation = "`" + difference + "` received from **`" + ellipsifyAccount(tx.Account) + "`**";
+            formattedDifference = "+" + numberWithCommas(formattedDifference);
+            explanation = "`" + numberWithCommas(difference) + "` received from **`" + ellipsifyAccount(tx.Account) + "`**";
         } else {
-            explanation = "`" + difference + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + dropsToXrp(tx.Fee) + "` fee";
+            explanation = "`" + numberWithCommas(difference) + "` sent to **`" + ellipsifyAccount(tx.Destination) + "`** + `" + dropsToXrp(tx.Fee) + "` fee";
         }
 
-        commentDetails.push("| `" + ellipsifyAccount(accountId) + "` | `" + dropsToXrp(previousBalance) + "` | `" + dropsToXrp(finalBalance) + "` | `" + formattedDifference + "` | " + explanation + " |");
+        commentDetails.push("| `" + ellipsifyAccount(accountId) + "` | `" + numberWithCommas(dropsToXrp(previousBalance)) + "` | `" + numberWithCommas(dropsToXrp(finalBalance)) + "` | `" + formattedDifference + "` | " + explanation + " |");
     }
 
     commentDetails.push("| | | | **`" + dropsToXrp(tx.Fee) + "`** | (the fee that was burned) |");
@@ -568,4 +568,10 @@ let rippleDateToReadable = function(rippleDate)
 let dropsToXrp = function(amount)
 {
     return (amount / 1000000);
+};
+
+let numberWithCommas = function(x) {
+    var parts = x.toString().split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
 };
